@@ -1,0 +1,161 @@
+From the marketer’s point of view, data is the most precious thing, irrespective of which platform you are migrating into. Drupal 8 has one of the best Migration API systems when it comes to moving multiple pieces of content into the application. So today we are going to look around the Drupal 8 migration API system, with an example of how to migrate the data from a csv file.
+
+Drupal 8 core ships with the following Migration modules:
+
+    Migrate
+    Migrate Drupal
+    Migrate Drupal UI
+
+
+These modules provide the Migration API service, to migrate data from the source system to Drupal 8. The migration service follows an Extract, Transform, Load (ETL) Process In Drupal 8 Migration API, the ETL process is completed by Source, Process and Destination plugins:
+
+ETL Process: Source, Process, DestinationThe ETL journey in Drupal 8
+
+ 
+
+Migrate Plugin: The Migrate plugin configures and manages each Extract, Transform, Load (ETL) migration process. In Drupal 8, these stages are labelled as Source, Process and Destination.
+
+Source plugin: In ETL terminology, the Source Plugin is the Extract process. The Source Plugin extracts the data from the data source, which can be a database, or a csv, json or xml file. In the example I will discuss, where we are migrating data from csv file, it is best to use the Migrate Source CSV contributed module.
+
+Here is the list of default Source Plugins that ship with Drupal core.
+
+Process plugin: In ETL terminology, the Process plugin fulfils the Transform stage. The Process Plugin transforms the “row” data to be readable within the system. For example, you may have a row data value of ‘Full name’ containing “Paul Walker Smith”. To complete a migration, we need to transform the data into three different values: first name, middle name and last name. The Process Plugin is able to transform the row into the separate values needed.
+
+Here is the list of available Process Plugins in Drupal 8 core. 
+
+Destination plugin: In ETL terminology, the Destination Plugin enables the data to be saved into Drupal 8 Databases. This means that the results of a migration create a Drupal config, along with content entities like nodes, users, taxonomy terms and files.  
+
+Here is the list of available Destination Plugins.
+
+ 
+Example: Migrating Users from CSV to Drupal 8
+
+To explain this process in context, here’s an example of how to migrate a list of users from a csv file into Drupal 8. The following steps explain the migration process; but first, it’s important to enable a couple of core and contrib modules.  
+
+ 
+1)  Download and enable Drupal 8 Migration modules
+
+From the Drupal 8 core we need to enable both ‘Migrate’ and ‘Migrate Drupal’ modules. This can be done by following the url path ‘/admin/modules’, or using drush, by typing the following commands:
+
+drush en migrate -y
+
+drush en migrate_drupal -y
+
+Now we need to find the contributed modules for migrating data from csv files. These are the ‘Migrate’ tools and ‘Migrate Source CSV’. To download these modules you can either visit the module page directly, to download and extract to the “modules/contrib” directory, or you can use composer, by typing the following commands on your terminal:
+
+composer require drupal/migrate_source_csv
+
+composer require drupal/migrate_tools:4.x-dev
+
+Once we have downloaded these modules, we can enable them, either directly from the url path “/admin/modules”, or using drush, by typing following commands on the command line:
+
+drush en migrate_source_csv -y
+
+drush en migrate_tools -y
+
+ 
+2) Create a custom module for migration
+
+Create a custom module and keep it in the /modules/custom directory. In this example, we are creating the custom module named “Migrate CSV”.
+
+ 
+3) Prepare the User Data in a csv file to migrate
+
+Now we need to collate the user details in a csv file, ready to be migrated into the Drupal system. We can use the following csv files to do so:
+
+ID 	Name 	Email 	Password 	First Name 	Last Name 	Roles
+1 	Joe 	joe@example.com 	joe123 	Joe 	B 	administrator
+2 	rakesh 	rakesh@example.com 	123rakesh 	Rakesh 	James 	authenticated,administrator
+3 	jack 	jack@example.com 	jack 	Jack 	David 	editor
+4 	DD 	dd@example.com 	dd@123 	D 	D 	authenticated,administrator,editor
+view raw
+migrate_csv_users.csv hosted with ❤ by GitHub
+
+Keep that file in the custom migrate_csv module under the path “/modules/custom/migrate_csv/assets/csv/migrate_csv_users.csv”
+
+ 
+4) Create the configuration file for the migration
+
+The Migration configuration file is a YAML file that describes the migration process and provides the mapping from the source data to Drupal's destination entities. These files can be placed under the migrations or config/install directories.
+
+In the migrations directory: To place files here, the filenames should be of the form migrate_csv_users.yml <migration ID>.yml. This approach is recommended when your migration configuration is fully hardcoded and does not need to be overridden.
+
+In the config/install directory: To place files here, the name of the files should be similar to, migrate_csv.migration.migrate_csv_users.yml ("migration" because they define entities of the "migration" type, “migrate_csv" because that is the module which implements the "migration" type, and migrate_csv_users is the “migration ID” which will look like
+
+ <module name>.<migration group> . <migration ID>.yml)
+
+In our case, we are going to place our migration configuration file under the “migrations” directory, so the path will be: migrate_csv/migrations/migrate_csv_users.yml
+
+And our migration configuration file is
+
+id: migrate_csv_users
+label: 'Migrate users from the csv file'
+migration_group: migration
+source:
+  plugin: csv
+  # Full path to the file.
+  path: '/Library/WebServer/Documents/d8migrate.local/modules/custom/migrate_csv/assets/csv/migrate_csv_users.csv'
+  header_row_count: 1
+  keys:
+    - ID
+  # Adding constant value.
+  constants:
+    status: 1
+process:
+  # Adding the mapping between the fields and the csv columns.
+  name: Name
+  mail: Email
+  roles:
+    plugin: explode
+    delimiter: ','
+    source: Roles
+  field_first_name: Firstname
+  field_last_name: Lastname
+  status: constants/status
+  # migrating the the password in plain texts.
+  pass:
+   plugin: callback
+   callable: md5
+   source: Password
+destination:
+  plugin: 'entity:user'
+  md5_passwords: true
+migration_dependencies:
+  required: {  }
+  optional: {  }
+view raw
+migrate_csv_users.yml hosted with ❤ by GitHub
+
+ 
+5)  Run the Migration using Drush 8.
+
+The Migrate Tools module provides a list of drush commands for migration. These include:
+
+drush migrate-fields-source (mfs)  To list the fields available for mapping in a source.
+
+drush migrate-import (mi, mim)   To perform one or more migration processes.       
+
+drush migrate-messages (mmsg) To view any messages associated with a migration.
+
+drush  migrate-reset-status(mrs)  To reset an active migration's status to idle.    
+
+drush migrate-rollback (mr)  To rollback one or more migrations.              
+
+drush migrate-status (ms)   To list all migrations with current status.
+
+drush migrate-stop (mst) To stop an active migration operation.
+
+First, we need run the drush ms, which shows you the list of migrations available to migrate.
+
+This should look like:
+
+List of Available Migrations ind rushThe list of available migrations in drush
+
+Then, we need to run the migration using the command: drush mim migrate_csv_users. The output should be something like the following:
+
+Migration process in drush
+The drush migration process output.
+
+After following these steps, you should have successfully migrated user data from a csv file into the Drupal 8 system. The Drupal 8 Migration API makes this process quick and simple, resulting in a new list of enabled users.
+
+If you follow the path “<your_site>/admin/people”, you can see the list of users, which should look something like:
